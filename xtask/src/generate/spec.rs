@@ -805,6 +805,21 @@ pub fn resolve_feature_list(
     resolve_feature_list_from_package(&meta, root, selection)
 }
 
+/// Concrete feature leaves the canonical registry keeps out of
+/// `Selection::Dist`.
+///
+/// Leanness tests assert against this derived set instead of naming a sentinel
+/// feature, so promoting a channel into `dist_extra_features` stays a
+/// one-line registry edit and never requires touching a test.
+#[cfg(test)]
+pub(crate) fn features_outside_dist(manifest_dir: &Path) -> anyhow::Result<Vec<String>> {
+    let dist = resolve_feature_list(manifest_dir, &Selection::Dist)?;
+    Ok(resolve_feature_list(manifest_dir, &Selection::All)?
+        .into_iter()
+        .filter(|feature| !dist.contains(feature))
+        .collect())
+}
+
 fn workspace_root_package(
     meta: &cargo_metadata::Metadata,
 ) -> anyhow::Result<&cargo_metadata::Package> {
@@ -1382,6 +1397,7 @@ mod tests {
             "aggregates must expand, not appear as leaves"
         );
         assert!(r.default_features.contains(&"gateway".to_string()));
+        assert!(!r.default_features.contains(&"channel-git".to_string()));
     }
 
     #[test]
@@ -1406,11 +1422,24 @@ mod tests {
         );
     }
 
+    /// Pins the lean contract by name on purpose: widening `dist` must be a
+    /// deliberate, reviewed edit here, not a silent consequence of a registry
+    /// change. The generator suites derive their expectations from the
+    /// registry; this one stays the policy tripwire.
     #[test]
     fn dist_matches_lean_release_contract() {
         let features = resolve_feature_list(&root(), &Selection::Dist).unwrap();
+        assert!(features.contains(&"channel-git".to_string()));
         let mut expected = resolve_feature_list(&root(), &Selection::Full).unwrap();
-        expected.extend(["channel-matrix", "channel-lark", "whatsapp-web"].map(str::to_owned));
+        expected.extend(
+            [
+                "channel-matrix",
+                "channel-lark",
+                "channel-git",
+                "whatsapp-web",
+            ]
+            .map(str::to_owned),
+        );
         expected.sort();
         expected.dedup();
         assert_eq!(features, expected);
@@ -1492,6 +1521,7 @@ mod tests {
             "distribution extras come from Cargo.toml registry"
         );
         assert!(extras.contains(&"channel-lark".to_string()));
+        assert!(extras.contains(&"channel-git".to_string()));
         assert!(extras.contains(&"whatsapp-web".to_string()));
     }
 
@@ -1556,7 +1586,9 @@ mod tests {
         .unwrap();
         assert_eq!(host, dist);
 
-        assert!(exclude_features(host, &["channel-slack".to_owned()]).is_err());
+        let outside_dist = features_outside_dist(&root()).unwrap();
+        let not_in_dist = outside_dist.first().expect("dist is not the kitchen sink");
+        assert!(exclude_features(host, std::slice::from_ref(not_in_dist)).is_err());
         let (target, excluded) = exclusions.iter().next().unwrap();
         let resolved =
             resolve_feature_list_for_target(&root(), &Selection::Dist, Some(target)).unwrap();
@@ -1596,6 +1628,17 @@ mod tests {
                 .unwrap();
         assert!(release.contains("features --selection dist --target \"${{ matrix.target }}\""));
         assert!(!release.contains("excluded_features"));
+        let cross_install = "- name: Install cross (MUSL targets)\n        if: matrix.use_cross\n        run: bash scripts/ci/install_release_tool.sh cross";
+        assert!(release.contains(cross_install));
+        assert!(!release.contains("cargo install cross"));
+        assert_eq!(
+            release
+                .matches("run: bash scripts/ci/install_release_tool.sh tauri-cli")
+                .count(),
+            3,
+            "all three desktop release jobs must use the pinned installer"
+        );
+        assert!(!release.contains("cargo install tauri-cli"));
 
         let manual = std::fs::read_to_string(
             root().join(".github/workflows/cross-platform-build-manual.yml"),
@@ -1620,9 +1663,8 @@ mod tests {
                 "- os: ubuntu-latest\n            target: {target}\n            use_cross: true"
             )));
         }
-        assert!(manual.contains(
-            "- name: Install cross (MUSL targets)\n        if: matrix.use_cross\n        run: cargo install cross --version 0.2.5 --locked"
-        ));
+        assert!(manual.contains(cross_install));
+        assert!(!manual.contains("cargo install cross"));
         assert!(manual.contains(
             "if [ \"${{ matrix.use_cross || 'false' }}\" = \"true\" ]; then\n              echo \"BUILD_CMD=cross build\""
         ));
