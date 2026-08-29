@@ -27,11 +27,3 @@ export function isManualScrollEvent(
 ): boolean {
   return !programmaticScrollPending || currentScrollTop < previousScrollTop;
 }
-
-export function shouldCancelProgrammaticFollow(
-  programmaticScrollPending: boolean,
-  previousScrollTop: number,
-  currentScrollTop: number,
-): boolean {
-  return programmaticScrollPending && currentScrollTop < previousScrollTop;
-}

@@ -9,7 +9,6 @@ import { t } from '@/lib/i18n';
 import {
   isManualScrollEvent,
   nextFollowState,
-  shouldCancelProgrammaticFollow,
 } from '@/pages/agentChatScroll.logic';
 import {
   COMMANDS,
@@ -160,11 +159,6 @@ export function AgentChatInner({
   const updateFollowFromScroll = useCallback((container: HTMLDivElement) => {
     const currentScrollTop = container.scrollTop;
     const previousScrollTop = lastScrollTopRef.current;
-    const cancelProgrammaticFollow = shouldCancelProgrammaticFollow(
-      programmaticScrollPendingRef.current,
-      previousScrollTop,
-      currentScrollTop,
-    );
     const wasManual = isManualScrollEvent(
       programmaticScrollPendingRef.current,
       previousScrollTop,
@@ -174,9 +168,6 @@ export function AgentChatInner({
 
     if (!wasManual) return;
 
-    if (cancelProgrammaticFollow) {
-      container.scrollTop = currentScrollTop;
-    }
     programmaticScrollPendingRef.current = false;
     setUserScrolledUp((wasScrolledUp) => !nextFollowState(
       !wasScrolledUp,
@@ -209,7 +200,7 @@ export function AgentChatInner({
       programmaticScrollPendingRef.current = true;
       lastScrollTopRef.current = container.scrollTop;
     }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, typing, streamingContent, userScrolledUp]);
 
   // Close model dropdown when clicking outside

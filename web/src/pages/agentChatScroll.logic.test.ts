@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   isManualScrollEvent,
   nextFollowState,
-  shouldCancelProgrammaticFollow,
 } from "./agentChatScroll.logic.ts";
 
 const nearBottom = {
@@ -23,8 +22,6 @@ test("programmatic scrolling does not suppress stream following", () => {
   assert.equal(nextFollowState(false, "programmatic", nearBottom), false);
   assert.equal(isManualScrollEvent(true, 400, 450), false);
   assert.equal(isManualScrollEvent(true, 450, 300), true);
-  assert.equal(shouldCancelProgrammaticFollow(true, 450, 300), true);
-  assert.equal(shouldCancelProgrammaticFollow(false, 300, 450), false);
 });
 
 test("manual scrolling away from and back to the tail controls stream following", () => {
