@@ -6,7 +6,11 @@ import remarkGfm from 'remark-gfm';
 import { useAgent, type ChatMessage } from '@/contexts/AgentContext';
 import { useDraft } from '@/hooks/useDraft';
 import { t } from '@/lib/i18n';
-import { isManualScrollEvent, nextFollowState } from '@/pages/agentChatScroll.logic';
+import {
+  isManualScrollEvent,
+  nextFollowState,
+  shouldCancelProgrammaticFollow,
+} from '@/pages/agentChatScroll.logic';
 import {
   COMMANDS,
   helpText,
@@ -155,15 +159,24 @@ export function AgentChatInner({
 
   const updateFollowFromScroll = useCallback((container: HTMLDivElement) => {
     const currentScrollTop = container.scrollTop;
+    const previousScrollTop = lastScrollTopRef.current;
+    const cancelProgrammaticFollow = shouldCancelProgrammaticFollow(
+      programmaticScrollPendingRef.current,
+      previousScrollTop,
+      currentScrollTop,
+    );
     const wasManual = isManualScrollEvent(
       programmaticScrollPendingRef.current,
-      lastScrollTopRef.current,
+      previousScrollTop,
       currentScrollTop,
     );
     lastScrollTopRef.current = currentScrollTop;
 
     if (!wasManual) return;
 
+    if (cancelProgrammaticFollow) {
+      container.scrollTop = currentScrollTop;
+    }
     programmaticScrollPendingRef.current = false;
     setUserScrolledUp((wasScrolledUp) => !nextFollowState(
       !wasScrolledUp,
