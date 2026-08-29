@@ -19,3 +19,11 @@ export function nextFollowState(
 ): boolean {
   return source === "manual" ? isNearBottom(metrics) : followsStream;
 }
+
+export function isManualScrollEvent(
+  programmaticScrollPending: boolean,
+  previousScrollTop: number,
+  currentScrollTop: number,
+): boolean {
+  return !programmaticScrollPending || currentScrollTop < previousScrollTop;
+}
