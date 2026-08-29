@@ -188,7 +188,7 @@ export function AgentChatInner({
   // Scroll to bottom on new messages / streaming, but only if the user
   // hasn't scrolled up to read history. When the user manually scrolls
   // away from the bottom, auto-scroll is suppressed so they can read
-  // without the viewport being pulled back down. #9562
+  // without the viewport being pulled back down.
   useEffect(() => {
     if (userScrolledUp) return;
     const container = messagesContainerRef.current;
