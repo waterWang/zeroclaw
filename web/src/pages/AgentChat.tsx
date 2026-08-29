@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { useAgent, type ChatMessage } from '@/contexts/AgentContext';
 import { useDraft } from '@/hooks/useDraft';
 import { t } from '@/lib/i18n';
+import { nextFollowState } from '@/pages/agentChatScroll.logic';
 import {
   COMMANDS,
   helpText,
@@ -148,7 +149,42 @@ export function AgentChatInner({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const pointerIsDownRef = useRef(false);
+  const scrollUpdateFrameRef = useRef<number | null>(null);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
+
+  const updateFollowFromManualInput = useCallback(() => {
+    if (scrollUpdateFrameRef.current !== null) return;
+
+    scrollUpdateFrameRef.current = window.requestAnimationFrame(() => {
+      scrollUpdateFrameRef.current = null;
+      const container = messagesContainerRef.current;
+      if (!container) return;
+
+      setUserScrolledUp((wasScrolledUp) => !nextFollowState(
+        !wasScrolledUp,
+        'manual',
+        container,
+      ));
+    });
+  }, []);
+
+  useEffect(() => () => {
+    if (scrollUpdateFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollUpdateFrameRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyboardScroll = (event: KeyboardEvent) => {
+      if (['ArrowDown', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp', ' '].includes(event.key)) {
+        updateFollowFromManualInput();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyboardScroll);
+    return () => document.removeEventListener('keydown', handleKeyboardScroll);
+  }, [updateFollowFromManualInput]);
 
   // Persist draft to in-memory store so it survives route changes
   useEffect(() => {
@@ -510,12 +546,28 @@ export function AgentChatInner({
       <div
         ref={messagesContainerRef}
         className={`flex-1 overflow-y-auto p-4 ${compact ? 'space-y-1.5' : 'space-y-4'}`}
-        onScroll={() => {
-          const el = messagesContainerRef.current;
-          if (!el) return;
-          // Consider "near the bottom" if within 150px of the scroll bottom
-          const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-          setUserScrolledUp(!isNearBottom);
+        onWheel={updateFollowFromManualInput}
+        onTouchMove={updateFollowFromManualInput}
+        onPointerDown={(event) => {
+          pointerIsDownRef.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={() => {
+          if (pointerIsDownRef.current) {
+            updateFollowFromManualInput();
+          }
+        }}
+        onPointerUp={(event) => {
+          pointerIsDownRef.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={(event) => {
+          pointerIsDownRef.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
         }}
       >
         {messages.length === 0 && (
